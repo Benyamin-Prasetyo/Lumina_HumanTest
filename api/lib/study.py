@@ -38,9 +38,9 @@ def send_json(handler, status: int, payload: dict) -> None:
 
 
 def _secret() -> str:
-    secret = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("STUDY_SECRET")
+    secret = os.environ.get("STUDY_SECRET") or os.environ.get("GOOGLE_SHEET_URL")
     if not secret:
-        raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY is not set")
+        raise RuntimeError("GOOGLE_SHEET_URL is not set")
     return secret
 
 
@@ -156,24 +156,21 @@ def save_answer(payload: dict) -> None:
 
 
 def _insert(row: dict) -> None:
-    base = os.environ.get("SUPABASE_URL", "").rstrip("/")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
-    if not base or not key:
-        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required")
+    url = os.environ.get("GOOGLE_SHEET_URL", "").strip()
+    if not url:
+        raise RuntimeError("GOOGLE_SHEET_URL is not set")
     request = urllib.request.Request(
-        f"{base}/rest/v1/study_responses",
+        url,
         data=json.dumps(row).encode("utf-8"),
-        headers={
-            "apikey": key,
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-            "Prefer": "return=minimal",
-        },
+        headers={"Content-Type": "application/json"},
         method="POST",
     )
     try:
         with urllib.request.urlopen(request, timeout=20) as response:
             response.read()
     except urllib.error.HTTPError as exc:
+        # Apps Script accepts the row, then redirects. That redirect is success.
+        if exc.code in (301, 302, 303, 307, 308):
+            return
         detail = exc.read().decode("utf-8", errors="replace")[:300]
-        raise RuntimeError(f"Supabase rejected the answer ({exc.code}): {detail}") from exc
+        raise RuntimeError(f"The spreadsheet rejected the answer ({exc.code}): {detail}") from exc
