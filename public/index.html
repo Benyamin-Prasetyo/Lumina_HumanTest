@@ -42,6 +42,7 @@
 const app = document.getElementById("app");
 let session = null;
 let step = 0;
+let saving = false;
 const answers = {};
 
 function startScreen() {
@@ -126,20 +127,33 @@ function showChoice(current, chosen) {
 }
 
 async function saveAndAdvance() {
+  if (saving) return;
+  const index = step;
   const err = document.getElementById("err");
+  const next = document.getElementById("next");
+  const back = document.getElementById("back");
+  saving = true;
+  if (next) next.disabled = true;
+  if (back) back.disabled = true;
   const res = await fetch("/api/answer", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify({
       sessionId: session.sessionId,
-      index: step,
-      photoId: answers[step],
+      index: index,
+      photoId: answers[index],
       token: session.token || ""
     })
   });
-  if (!res.ok) { err.textContent = "Could not save that answer. Please try Next again."; return; }
-  if (step + 1 >= session.steps.length) return thanks();
-  step += 1;
+  saving = false;
+  if (!res.ok) {
+    if (err) err.textContent = "Could not save that answer. Please try Next again.";
+    if (next) next.disabled = false;
+    if (back) back.disabled = index === 0;
+    return;
+  }
+  if (index + 1 >= session.steps.length) return thanks();
+  step = index + 1;
   show();
 }
 
